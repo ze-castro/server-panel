@@ -1,6 +1,8 @@
 # Same file on the Mac and on the server; the differences live in each machine's .env.
+name: server-panel
 services:
   panel:
+    container_name: server-panel
     # Locally: built from source. On a server: set PANEL_IMAGE to the published image and pull it.
     image: ${PANEL_IMAGE:-server-panel:local}
     build: .
