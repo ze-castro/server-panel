@@ -5,6 +5,8 @@ A self-hosted web panel for a Linux server, with two sides:
 - **Left:** live stats (CPU, GPU, memory, swap, disks, load, network, containers) and restart and shut down buttons.
 - **Right:** a live SSH terminal and a log viewer for the systemd journal and Docker containers.
 
+![Server panel: stats and power buttons on the left, SSH terminal on the right](docs/screenshot.png)
+
 The app runs in Docker and reaches the server over SSH. It needs a Linux server with systemd; Docker is optional and only needed for the container list and container logs.
 
 > **The app has no login of its own.** Anyone who can open it gets a shell on your server. Only expose it behind an authenticating proxy, such as Cloudflare Access, Authelia, or a VPN.
