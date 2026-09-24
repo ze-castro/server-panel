@@ -1,0 +1,40 @@
+{
+	"name": "server-panel",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "bunx --bun vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"start": "bun server.ts"
+	},
+	"devDependencies": {
+		"@internationalized/date": "^3.12.4",
+		"@lucide/svelte": "^1.47.0",
+		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/vite": "^4.3.0",
+		"@types/ssh2": "^1.15.6",
+		"@types/ws": "^8.18.1",
+		"@xterm/addon-fit": "^0.11.0",
+		"@xterm/xterm": "^6.0.0",
+		"bits-ui": "^2.14.4",
+		"cn": "^0.4.0",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"tailwind-variants": "^3.3.1",
+		"tailwindcss": "^4.3.0",
+		"tw-animate-css": "^1.4.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"ssh2": "^1.17.0",
+		"ws": "^8.21.3"
+	}
+}

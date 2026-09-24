@@ -1,0 +1,28 @@
+# Same file on the Mac and on the server; the differences live in each machine's .env.
+services:
+  panel:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      # Must match the URL in the browser, or SvelteKit's CSRF check rejects the restart/shutdown forms.
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
+      SSH_HOST: ${SSH_HOST:?set SSH_HOST in .env}
+      SSH_PORT: ${SSH_PORT:-22}
+      SSH_USER: ${SSH_USER:?set SSH_USER in .env}
+      SSH_HOST_KEY_SHA256: ${SSH_HOST_KEY_SHA256:?set SSH_HOST_KEY_SHA256 in .env}
+      SSH_KEY_PATH: /run/secrets/ssh_key # path inside the container, not the one from .env
+      SSH_KEY_PASSPHRASE: ${SSH_KEY_PASSPHRASE:-}
+    extra_hosts:
+      # Lets the server's .env use SSH_HOST=host.docker.internal; harmless on the Mac.
+      - host.docker.internal:host-gateway
+    secrets:
+      - ssh_key
+    ports:
+      # Loopback only. On the server, cloudflared on the host reaches it; on the Mac, only you do.
+      - 127.0.0.1:3000:3000
+
+secrets:
+  ssh_key:
+    # Key file on the machine running compose (the same SSH_KEY_PATH `bun run dev` uses on the Mac).
+    file: ${SSH_KEY_PATH:?set SSH_KEY_PATH in .env}
