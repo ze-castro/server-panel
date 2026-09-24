@@ -1,10 +1,11 @@
 # Same file on the Mac and on the server; the differences live in each machine's .env.
-name: server-panel
+name: server
+
 services:
-  panel:
-    container_name: server-panel
-    # Locally: built from source. On a server: set PANEL_IMAGE to the published image and pull it.
-    image: ${PANEL_IMAGE:-server-panel:local}
+  server:
+    container_name: server
+    # Locally: built from source. On a server: set SERVER_IMAGE to the published image and pull it.
+    image: ${SERVER_IMAGE:-server:local}
     build: .
     restart: unless-stopped
     environment:
@@ -24,7 +25,7 @@ services:
       - ssh_key
     ports:
       # Loopback only. On the server, cloudflared on the host reaches it; on the Mac, only you do.
-      - 127.0.0.1:${PANEL_PORT:-3010}:3010
+      - 127.0.0.1:${SERVER_PORT:-3010}:3010
 
 secrets:
   ssh_key:
