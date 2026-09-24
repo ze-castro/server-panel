@@ -72,15 +72,18 @@
 <aside
   class="relative flex flex-col gap-7 overflow-y-auto overscroll-contain border-b p-5 lg:border-r lg:border-b-0"
 >
-  <header class="space-y-1">
-    <h1 class="text-xl font-semibold tracking-tight">
-      {stats?.hostname ?? (error ? 'Server unreachable' : 'Connecting…')}
-    </h1>
-    {#if stats}
-      <p class="text-muted-foreground text-sm">
-        Up {duration(stats.uptimeSeconds)}, kernel {stats.kernel}
-      </p>
-    {/if}
+  <header class="flex items-center gap-3">
+    <img src="/icon-192.png" alt="" class="size-10 shrink-0" />
+    <div class="min-w-0 space-y-0.5">
+      <h1 class="truncate text-xl font-semibold tracking-tight">
+        {stats?.hostname ?? (error ? 'Server unreachable' : 'Connecting…')}
+      </h1>
+      {#if stats}
+        <p class="text-muted-foreground truncate text-sm">
+          Up {duration(stats.uptimeSeconds)}, kernel {stats.kernel}
+        </p>
+      {/if}
+    </div>
   </header>
 
   {#if error}

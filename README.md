@@ -1,4 +1,8 @@
-# Server panel
+<p align="center">
+  <img src="static/icon-512.png" width="112" alt="Server panel icon" />
+</p>
+
+<h1 align="center">Server panel</h1>
 
 A self-hosted web panel for a Linux server, with two sides:
 

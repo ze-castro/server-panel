@@ -1,12 +1,21 @@
 <!doctype html>
 <html lang="en" class="dark overscroll-none">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="text-scale" content="scale" />
-		%sveltekit.head%
-	</head>
-	<body data-sveltekit-preload-data="hover" class="overscroll-none lg:h-dvh lg:overflow-hidden">
-		<div style="display: contents">%sveltekit.body%</div>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="text-scale" content="scale" />
+    <link rel="icon" type="image/png" href="%sveltekit.assets%/favicon.png" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+    <link
+      rel="manifest"
+      href="%sveltekit.assets%/manifest.webmanifest"
+      crossorigin="use-credentials"
+    />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="apple-mobile-web-app-title" content="Server" />
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover" class="overscroll-none lg:h-dvh lg:overflow-hidden">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
 </html>
