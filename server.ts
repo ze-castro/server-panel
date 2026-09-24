@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { handler } from './build/handler.js';
 import { handleUpgrade } from './src/lib/server/terminal-ws.ts';
 
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(process.env.PORT ?? 3010);
 const host = process.env.HOST ?? '0.0.0.0';
 
 const server = createServer(handler);

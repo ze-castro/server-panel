@@ -1,12 +1,14 @@
 # Same file on the Mac and on the server; the differences live in each machine's .env.
 services:
   panel:
+    # Locally: built from source. On a server: set PANEL_IMAGE to the published image and pull it.
+    image: ${PANEL_IMAGE:-server-panel:local}
     build: .
     restart: unless-stopped
     environment:
-      PORT: 3000
+      PORT: 3010
       # Must match the URL in the browser, or SvelteKit's CSRF check rejects the restart/shutdown forms.
-      ORIGIN: ${ORIGIN:-http://localhost:3000}
+      ORIGIN: ${ORIGIN:-http://localhost:3010}
       SSH_HOST: ${SSH_HOST:?set SSH_HOST in .env}
       SSH_PORT: ${SSH_PORT:-22}
       SSH_USER: ${SSH_USER:?set SSH_USER in .env}
@@ -20,7 +22,7 @@ services:
       - ssh_key
     ports:
       # Loopback only. On the server, cloudflared on the host reaches it; on the Mac, only you do.
-      - 127.0.0.1:3000:3000
+      - 127.0.0.1:${PANEL_PORT:-3010}:3010
 
 secrets:
   ssh_key:

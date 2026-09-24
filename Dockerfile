@@ -19,5 +19,5 @@ COPY --from=build /app/build ./build
 COPY package.json server.ts ./
 COPY src/lib/server ./src/lib/server
 USER bun
-EXPOSE 3000
+EXPOSE 3010
 CMD ["bun", "server.ts"]
