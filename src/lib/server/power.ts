@@ -12,7 +12,7 @@ export async function power(
 	action: PowerAction
 ): Promise<{ ok: true } | { ok: false; message: string }> {
 	try {
-		const { code, stderr } = await exec(COMMANDS[action], { timeoutMs: 8_000 });
+		const { code, stderr } = await exec(COMMANDS[action], { timeoutMs: 30_000 });
 		// null = channel closed before an exit status arrived, i.e. the host is already going down.
 		if (code === 0 || code === null) return { ok: true };
 		return { ok: false, message: stderr.trim() || `Command exited with code ${code}` };

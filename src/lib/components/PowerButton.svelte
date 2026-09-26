@@ -32,9 +32,12 @@
 			use:enhance={() => {
 				pending = true;
 				return async ({ update }) => {
-					await update();
-					pending = false;
-					open = false;
+					try {
+						await update();
+					} finally {
+						pending = false;
+						open = false;
+					}
 				};
 			}}
 		>
