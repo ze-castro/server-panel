@@ -1,7 +1,7 @@
 import { execScript, splitSections } from './ssh';
 import type { Container, Gpu, Stats } from '../types';
 
-const SAMPLE_SECONDS = 1;
+const SAMPLE_SECONDS = 0.5;
 
 // One round trip; CPU, network and GPU idle time are sampled twice to compute rates.
 // Reads /proc and sysfs directly where possible so it works on minimal installs.
@@ -12,7 +12,7 @@ first() { cat "$@" 2>/dev/null | head -n1; }
 cards() { for c in /sys/class/drm/card[0-9]*; do case "\${c##*/}" in *-*) ;; *) [ -e "$c" ] && echo "$c" ;; esac; done; }
 # Intel: time spent in the RC6 sleep state (i915) or idle (xe); busy = 1 - idle/elapsed
 gpu_idle() {
-	cut -d' ' -f1 /proc/uptime
+	date +%s%3N
 	for c in $(cards); do
 		printf '%s\\t%s\\n' "\${c##*/}" "$(first "$c/power/rc6_residency_ms" "$c/device/tile0/gt0/gtidle/idle_residency_ms")"
 	done
@@ -125,7 +125,7 @@ function idleSample(lines: string[] = []): { at: number | null; idle: Map<string
 function gpus(s: Map<string, string[]>): Gpu[] {
 	const before = idleSample(s.get('gpu1'));
 	const after = idleSample(s.get('gpu2'));
-	const elapsedMs = before.at !== null && after.at !== null ? (after.at - before.at) * 1000 : 0;
+	const elapsedMs = before.at !== null && after.at !== null ? after.at - before.at : 0;
 
 	const result: Gpu[] = [];
 	for (const line of s.get('gpuinfo') ?? []) {
@@ -206,8 +206,8 @@ async function sample(): Promise<Stats> {
 	};
 }
 
-// Coalesce concurrent requests (multiple tabs) and cache briefly: each sample holds an SSH channel for ~1s.
-const MAX_AGE_MS = 2_000;
+// Coalesce concurrent requests (multiple tabs) and cache briefly: each sample holds an SSH channel for ~0.5s.
+const MAX_AGE_MS = 400;
 let cached: { at: number; value: Stats } | undefined;
 let inflight: Promise<Stats> | undefined;
 

@@ -8,7 +8,7 @@
 
   let { result }: { result: { ok: boolean; message: string } | null | undefined } = $props();
 
-  const POLL_MS = 3_000;
+  const POLL_MS = 500;
 
   let stats = $state<Stats | null>(null);
   let error = $state<string | null>(null);
@@ -19,6 +19,7 @@
     const controller = new AbortController();
 
     async function poll() {
+      const started = Date.now();
       if (document.visibilityState === 'visible') {
         try {
           const res = await fetch('/api/stats', { signal: controller.signal });
@@ -35,7 +36,8 @@
           error = 'Stats unavailable. If this persists, reload the page to sign in again.';
         }
       }
-      if (!stopped) timer = setTimeout(poll, POLL_MS);
+      // Fixed cadence: subtract the request time so the interval is ~POLL_MS, not POLL_MS + latency.
+      if (!stopped) timer = setTimeout(poll, Math.max(0, POLL_MS - (Date.now() - started)));
     }
 
     poll();
