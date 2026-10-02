@@ -69,6 +69,11 @@
     return t.standby ? 'Spun down' : 'No data';
   }
 
+  // Underline-style tabs: overrides the default pill look of the shadcn trigger.
+  const tabTrigger =
+    'h-auto flex-none -mb-px rounded-none border-0 border-b-2 border-transparent px-0 pt-0 pb-2 text-muted-foreground hover:text-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-foreground dark:data-[state=active]:bg-transparent';
+  const tabContent = 'min-h-0 flex-1 overflow-y-auto overscroll-contain';
+
   const stateColor = (state: string) =>
     state === 'running'
       ? 'bg-emerald-500'
@@ -78,7 +83,7 @@
 </script>
 
 <aside
-  class="relative flex flex-col gap-7 overflow-y-auto overscroll-contain border-b p-5 lg:border-r lg:border-b-0"
+  class="relative flex flex-col gap-5 border-b p-5 lg:min-h-0 lg:border-r lg:border-b-0"
 >
   <header class="flex items-center gap-3">
     <img src="/icon-192.png" alt="" class="size-10 shrink-0" />
@@ -99,13 +104,14 @@
   {/if}
 
   {#if stats}
-    <Tabs.Root value="resources" class="gap-4">
-      <Tabs.List class="w-full">
-        <Tabs.Trigger value="resources">Resources</Tabs.Trigger>
-        <Tabs.Trigger value="temperatures">Temperatures</Tabs.Trigger>
+    <Tabs.Root value="resources" class="min-h-0 flex-1 gap-4">
+      <Tabs.List class="h-auto w-full justify-start gap-5 rounded-none border-b bg-transparent p-0">
+        <Tabs.Trigger value="resources" class={tabTrigger}>Resources</Tabs.Trigger>
+        <Tabs.Trigger value="temperatures" class={tabTrigger}>Temperatures</Tabs.Trigger>
+        <Tabs.Trigger value="containers" class={tabTrigger}>Containers</Tabs.Trigger>
       </Tabs.List>
 
-      <Tabs.Content value="resources" class="space-y-4">
+      <Tabs.Content value="resources" class={[tabContent, 'space-y-4']}>
         <Meter
           label="CPU ({stats.cores} cores)"
           value={stats.cpuPercent}
@@ -151,7 +157,7 @@
         </dl>
       </Tabs.Content>
 
-      <Tabs.Content value="temperatures" class="space-y-4">
+      <Tabs.Content value="temperatures" class={[tabContent, 'space-y-4']}>
         {@const temps = stats.temperatures}
         {#each [temps.cpu, ...temps.gpus].filter((t) => t !== null) as t, i (i)}
           <Meter label={t.label} value={percent(t.celsius ?? 0, t.limitC)} detail={tempDetail(t)} />
@@ -170,32 +176,31 @@
           {/each}
         {/if}
       </Tabs.Content>
-    </Tabs.Root>
 
-    <section class="space-y-3" aria-labelledby="containers-heading">
-      <h2 id="containers-heading" class="text-sm font-medium">Containers</h2>
-      {#if stats.containers === null}
-        <p class="text-muted-foreground text-sm">
-          Add the SSH user to the docker group to list containers.
-        </p>
-      {:else if stats.containers.length === 0}
-        <p class="text-muted-foreground text-sm">No containers on this host.</p>
-      {:else}
-        <ul class="space-y-2 text-sm">
-          {#each stats.containers as c (c.name)}
-            <li class="flex items-center gap-2.5" title={c.image}>
-              <span class={['size-2 shrink-0 rounded-full', stateColor(c.state)]} aria-hidden="true"
-              ></span>
-              <span class="truncate">{c.name}</span>
-              <span class="text-muted-foreground ml-auto shrink-0 text-xs">{c.status}</span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+      <Tabs.Content value="containers" class={tabContent}>
+        {#if stats.containers === null}
+          <p class="text-muted-foreground text-sm">
+            Add the SSH user to the docker group to list containers.
+          </p>
+        {:else if stats.containers.length === 0}
+          <p class="text-muted-foreground text-sm">No containers on this host.</p>
+        {:else}
+          <ul class="space-y-2 text-sm">
+            {#each stats.containers as c (c.name)}
+              <li class="flex items-center gap-2.5" title={c.image}>
+                <span class={['size-2 shrink-0 rounded-full', stateColor(c.state)]} aria-hidden="true"
+                ></span>
+                <span class="truncate">{c.name}</span>
+                <span class="text-muted-foreground ml-auto shrink-0 text-xs">{c.status}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </Tabs.Content>
+    </Tabs.Root>
   {/if}
 
-  <section class="mt-auto space-y-2 border-t pt-5" aria-labelledby="power-heading">
+  <section class="mt-auto shrink-0 space-y-2 border-t pt-5" aria-labelledby="power-heading">
     <h2 id="power-heading" class="sr-only">Power</h2>
     <PowerButton
       action="reboot"
