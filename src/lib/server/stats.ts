@@ -1,5 +1,5 @@
 import { execScript, splitSections } from './ssh';
-import type { Container, Gpu, Stats } from '../types';
+import type { Container, Gpu, Stats, TempSensor } from '../types';
 
 const SAMPLE_SECONDS = 0.5;
 
@@ -28,16 +28,25 @@ echo '@gpuinfo'
 for c in $(cards); do
 	d="$c/device"
 	[ -r "$d/vendor" ] || continue
-	printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "\${c##*/}" "$(cat "$d/vendor")" \\
+	printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "\${c##*/}" "$(cat "$d/vendor")" \\
 		"$(first "$c/gt_act_freq_mhz" "$d/tile0/gt0/freq0/act_freq")" \\
 		"$(first "$c/gt_RP0_freq_mhz" "$d/tile0/gt0/freq0/rp0_freq")" \\
 		"$(first "$d/gpu_busy_percent")" \\
 		"$(first "$d/mem_info_vram_used")" "$(first "$d/mem_info_vram_total")" \\
-		"$(first "$d"/hwmon/hwmon*/temp1_input)" \\
+		"$(first "$d"/hwmon/hwmon*/temp1_input)" "$(first "$d"/hwmon/hwmon*/temp1_crit)" \\
 		"$(lspci -mm -s "$(basename "$(readlink -f "$d")")" 2>/dev/null | head -n1)"
 done
 echo '@nvidia'
 command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+echo '@cputemp'
+for h in /sys/class/hwmon/hwmon*; do
+	case "$(first "$h/name")" in coretemp|k10temp|zenpower) ;; *) continue ;; esac
+	for t in "$h"/temp*_input; do
+		[ -r "$t" ] || continue
+		p="\${t%_input}"
+		printf '%s\\t%s\\t%s\\n' "$(first "\${p}_label")" "$(first "$t")" "$(first "\${p}_crit")"
+	done
+done
 echo '@mem'; cat /proc/meminfo
 echo '@load'; cat /proc/loadavg
 echo '@uptime'; cat /proc/uptime
@@ -45,6 +54,21 @@ echo '@cores'; nproc
 echo '@host'; cat /proc/sys/kernel/hostname /proc/sys/kernel/osrelease
 echo '@disk'; df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null
 echo '@docker'; docker ps -a --format '{{json .}}' 2>/dev/null || echo '!unavailable'
+`;
+
+// Physical disks only (sd*, nvme*): RAID members show up individually, md/zram/eMMC don't.
+// The smartctl commands must match the sudoers rule exactly (see README).
+// -n standby: a spun-down SATA disk is skipped instead of woken up.
+const DISK_SCRIPT = `
+export LC_ALL=C
+echo '@lsblk'; lsblk -J -d -o NAME,TYPE,ROTA,MODEL
+for d in $(lsblk -dn -o NAME,TYPE | awk '$2 == "disk" { print $1 }'); do
+	echo "@smart $d"
+	case "$d" in
+		sd*) sudo -n /usr/sbin/smartctl --json=c -n standby -A -l scttempsts "/dev/$d" ;;
+		nvme*) sudo -n /usr/sbin/smartctl --json=c -i -A "/dev/$d" ;;
+	esac
+done
 `;
 
 function cpuTimes(line = ''): { idle: number; total: number } {
@@ -122,14 +146,39 @@ function idleSample(lines: string[] = []): { at: number | null; idle: Map<string
 	return { at: num(lines[0]), idle };
 }
 
-function gpus(s: Map<string, string[]>): Gpu[] {
+/** Bar scale for a temperature: the reported limit when it's sane, otherwise a typical value. */
+const limitC = (reported: number | null | undefined, fallback: number): number =>
+	reported != null && reported > 0 && reported <= 150 ? reported : fallback;
+
+function cpuTemperature(lines: string[] = []): TempSensor | null {
+	const sensors = lines.flatMap((line) => {
+		const [label = '', input, crit] = line.split('\t');
+		const milliC = num(input);
+		return milliC === null ? [] : [{ label, celsius: milliC / 1000, crit: num(crit) }];
+	});
+	// Package (Intel) or die (AMD) sensor when there is one, otherwise the hottest core.
+	const preferred = sensors.filter((s) => /^(Package id|Tdie)/.test(s.label));
+	const tctl = sensors.filter((s) => s.label === 'Tctl');
+	const candidates = preferred.length ? preferred : tctl.length ? tctl : sensors;
+	if (!candidates.length) return null;
+	const hottest = candidates.reduce((a, b) => (b.celsius > a.celsius ? b : a));
+	return {
+		label: 'CPU',
+		celsius: hottest.celsius,
+		limitC: limitC(hottest.crit !== null ? hottest.crit / 1000 : null, 100)
+	};
+}
+
+function gpus(s: Map<string, string[]>): { gpus: Gpu[]; temperatures: TempSensor[] } {
 	const before = idleSample(s.get('gpu1'));
 	const after = idleSample(s.get('gpu2'));
 	const elapsedMs = before.at !== null && after.at !== null ? after.at - before.at : 0;
 
 	const result: Gpu[] = [];
+	const temperatures: TempSensor[] = [];
 	for (const line of s.get('gpuinfo') ?? []) {
-		const [card, vendor, act, max, busy, vramUsed, vramTotal, temp, lspci] = line.split('\t');
+		const [card, vendor, act, max, busy, vramUsed, vramTotal, temp, tempCrit, lspci] =
+			line.split('\t');
 		if (vendor === '0x10de') continue; // NVIDIA comes from nvidia-smi below
 
 		let busyPercent = num(busy); // AMD reports this directly
@@ -142,8 +191,17 @@ function gpus(s: Map<string, string[]>): Gpu[] {
 		const used = num(vramUsed);
 		const total = num(vramTotal);
 		const milliC = num(temp);
+		const critMilliC = num(tempCrit);
+		const name = gpuName(vendor, lspci);
+		if (milliC !== null) {
+			temperatures.push({
+				label: name,
+				celsius: milliC / 1000,
+				limitC: limitC(critMilliC !== null ? critMilliC / 1000 : null, 100)
+			});
+		}
 		result.push({
-			name: gpuName(vendor, lspci),
+			name,
 			busyPercent,
 			freqMhz: num(act),
 			maxFreqMhz: num(max),
@@ -155,8 +213,10 @@ function gpus(s: Map<string, string[]>): Gpu[] {
 	for (const line of s.get('nvidia') ?? []) {
 		const fields = line.split(',').map((f) => f.trim());
 		const [util, memUsed, memTotal, temp] = fields.slice(-4).map(num);
+		const name = fields.slice(0, -4).join(', ');
+		if (temp !== null) temperatures.push({ label: name, celsius: temp, limitC: 100 });
 		result.push({
-			name: fields.slice(0, -4).join(', '),
+			name,
 			busyPercent: util,
 			freqMhz: null,
 			maxFreqMhz: null,
@@ -167,12 +227,93 @@ function gpus(s: Map<string, string[]>): Gpu[] {
 			temperatureC: temp
 		});
 	}
-	return result;
+	return { gpus: result, temperatures };
+}
+
+type LsblkDevice = { name: string; type: string; rota?: boolean | string | null; model?: string | null };
+type SmartJson = {
+	temperature?: { current?: number; op_limit_max?: number; critical_limit_max?: number };
+	power_mode?: { name?: string };
+};
+
+/** null when smartctl couldn't run for any disk (no sudoers rule, or smartmontools missing). */
+function diskTemperatures(s: Map<string, string[]>): TempSensor[] | null {
+	let devices: LsblkDevice[] = [];
+	try {
+		devices = (JSON.parse((s.get('lsblk') ?? []).join('\n')) as { blockdevices?: LsblkDevice[] })
+			.blockdevices ?? [];
+	} catch {
+		return [];
+	}
+
+	const result: TempSensor[] = [];
+	let anyOutput = false;
+	for (const d of devices) {
+		if (d.type !== 'disk' || !/^(sd|nvme)/.test(d.name)) continue;
+		const model = d.model?.trim();
+		const label = model ? `${model} (${d.name})` : d.name;
+		// util-linux >= 2.38 emits a boolean, older versions "1"/"0"
+		const fallback = d.rota === true || d.rota === '1' ? 60 : 70;
+
+		let smart: SmartJson | undefined;
+		try {
+			const line = s.get(`smart ${d.name}`)?.find((l) => l.startsWith('{'));
+			smart = line ? (JSON.parse(line) as SmartJson) : undefined;
+		} catch {
+			smart = undefined;
+		}
+		if (smart) anyOutput = true;
+
+		const t = smart?.temperature;
+		const celsius = t?.current ?? null;
+		result.push({
+			label,
+			celsius,
+			limitC: limitC(t?.critical_limit_max ?? t?.op_limit_max, fallback),
+			standby: celsius === null && /^(STANDBY|SLEEP)/.test(smart?.power_mode?.name ?? '')
+		});
+	}
+	return anyOutput || result.length === 0 ? result : null;
+}
+
+async function sampleDisks(): Promise<TempSensor[] | null> {
+	const { stdout } = await execScript(DISK_SCRIPT, { timeoutMs: 30_000 });
+	return diskTemperatures(splitSections(stdout));
+}
+
+// Disk temps change slowly and each smartctl call is a SMART command to the drive, so they're
+// refreshed in the background at most every 30s instead of on every stats poll.
+const DISK_MAX_AGE_MS = 30_000;
+let diskCache: { at: number; value: TempSensor[] | null } | undefined;
+let diskInflight: Promise<TempSensor[] | null> | undefined;
+
+function refreshDisks(): Promise<TempSensor[] | null> {
+	diskInflight ??= sampleDisks()
+		.catch((err) => {
+			console.error('[stats] disk temperatures', err);
+			return diskCache?.value ?? [];
+		})
+		.then((value) => {
+			diskCache = { at: Date.now(), value };
+			return value;
+		})
+		.finally(() => (diskInflight = undefined));
+	return diskInflight;
+}
+
+function diskTemps(): Promise<TempSensor[] | null> {
+	if (!diskCache) return refreshDisks(); // first request waits; later ones never do
+	if (Date.now() - diskCache.at > DISK_MAX_AGE_MS) void refreshDisks();
+	return Promise.resolve(diskCache.value);
 }
 
 async function sample(): Promise<Stats> {
-	const { stdout } = await execScript(SCRIPT, { timeoutMs: 15_000 });
+	const [{ stdout }, diskSensors] = await Promise.all([
+		execScript(SCRIPT, { timeoutMs: 15_000 }),
+		diskTemps()
+	]);
 	const s = splitSections(stdout);
+	const gpu = gpus(s);
 
 	const cpu1 = cpuTimes(s.get('cpu1')?.[0]);
 	const cpu2 = cpuTimes(s.get('cpu2')?.[0]);
@@ -193,7 +334,7 @@ async function sample(): Promise<Stats> {
 		cores: Number(s.get('cores')?.[0] ?? 1),
 		load: [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0],
 		cpuPercent,
-		gpus: gpus(s),
+		gpus: gpu.gpus,
 		memory: { total: mem.MemTotal ?? 0, used: (mem.MemTotal ?? 0) - (mem.MemAvailable ?? 0) },
 		swap: { total: mem.SwapTotal ?? 0, used: (mem.SwapTotal ?? 0) - (mem.SwapFree ?? 0) },
 		disks: disks(s.get('disk')),
@@ -202,6 +343,7 @@ async function sample(): Promise<Stats> {
 			txBytesPerSec: Math.max(0, net2.tx - net1.tx) / SAMPLE_SECONDS
 		},
 		containers: containers(s.get('docker')),
+		temperatures: { cpu: cpuTemperature(s.get('cputemp')), gpus: gpu.temperatures, disks: diskSensors },
 		sampledAt: new Date().toISOString()
 	};
 }

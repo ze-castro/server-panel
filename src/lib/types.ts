@@ -13,6 +13,16 @@ export type Gpu = {
 	temperatureC: number | null;
 };
 
+export type TempSensor = {
+	label: string;
+	/** null when unreadable, or the disk is spun down */
+	celsius: number | null;
+	/** Bar scale: the sensor's critical / max operating temperature, or a typical value */
+	limitC: number;
+	/** Disks: skipped because reading would spin it up */
+	standby?: boolean;
+};
+
 export type Stats = {
 	hostname: string;
 	kernel: string;
@@ -27,6 +37,12 @@ export type Stats = {
 	network: { rxBytesPerSec: number; txBytesPerSec: number };
 	/** null when the SSH user can't run `docker ps` */
 	containers: Container[] | null;
+	temperatures: {
+		cpu: TempSensor | null;
+		gpus: TempSensor[];
+		/** physical disks, up to 30s old; null when smartctl can't run via sudo */
+		disks: TempSensor[] | null;
+	};
 	sampledAt: string;
 };
 

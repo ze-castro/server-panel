@@ -2,9 +2,10 @@
   import PowerIcon from '@lucide/svelte/icons/power';
   import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
   import Meter from './Meter.svelte';
+  import * as Tabs from '$lib/components/ui/tabs/index.js';
   import PowerButton from './PowerButton.svelte';
   import { bytes, duration, percent } from '$lib/format';
-  import type { Gpu, Stats } from '$lib/types';
+  import type { Gpu, Stats, TempSensor } from '$lib/types';
 
   let { result }: { result: { ok: boolean; message: string } | null | undefined } = $props();
 
@@ -63,6 +64,11 @@
     return parts.join(', ') || 'No data';
   }
 
+  function tempDetail(t: TempSensor): string {
+    if (t.celsius !== null) return `${t.celsius.toFixed(0)} °C`;
+    return t.standby ? 'Spun down' : 'No data';
+  }
+
   const stateColor = (state: string) =>
     state === 'running'
       ? 'bg-emerald-500'
@@ -93,52 +99,78 @@
   {/if}
 
   {#if stats}
-    <section class="space-y-4" aria-labelledby="resources-heading">
-      <h2 id="resources-heading" class="text-sm font-medium">Resources</h2>
-      <Meter
-        label="CPU ({stats.cores} cores)"
-        value={stats.cpuPercent}
-        detail="{stats.cpuPercent.toFixed(0)}%"
-      />
-      {#each stats.gpus as gpu, i (i)}
-        <Meter label={gpu.name} value={gpuValue(gpu)} detail={gpuDetail(gpu)} />
-        {#if gpu.vram}
+    <Tabs.Root value="resources" class="gap-4">
+      <Tabs.List class="w-full">
+        <Tabs.Trigger value="resources">Resources</Tabs.Trigger>
+        <Tabs.Trigger value="temperatures">Temperatures</Tabs.Trigger>
+      </Tabs.List>
+
+      <Tabs.Content value="resources" class="space-y-4">
+        <Meter
+          label="CPU ({stats.cores} cores)"
+          value={stats.cpuPercent}
+          detail="{stats.cpuPercent.toFixed(0)}%"
+        />
+        {#each stats.gpus as gpu, i (i)}
+          <Meter label={gpu.name} value={gpuValue(gpu)} detail={gpuDetail(gpu)} />
+          {#if gpu.vram}
+            <Meter
+              label="{gpu.name} memory"
+              value={percent(gpu.vram.used, gpu.vram.total)}
+              detail="{bytes(gpu.vram.used)} of {bytes(gpu.vram.total)}"
+            />
+          {/if}
+        {/each}
+        <Meter
+          label="Memory"
+          value={percent(stats.memory.used, stats.memory.total)}
+          detail="{bytes(stats.memory.used)} of {bytes(stats.memory.total)}"
+        />
+        {#if stats.swap.total > 0}
           <Meter
-            label="{gpu.name} memory"
-            value={percent(gpu.vram.used, gpu.vram.total)}
-            detail="{bytes(gpu.vram.used)} of {bytes(gpu.vram.total)}"
+            label="Swap"
+            value={percent(stats.swap.used, stats.swap.total)}
+            detail="{bytes(stats.swap.used)} of {bytes(stats.swap.total)}"
           />
         {/if}
-      {/each}
-      <Meter
-        label="Memory"
-        value={percent(stats.memory.used, stats.memory.total)}
-        detail="{bytes(stats.memory.used)} of {bytes(stats.memory.total)}"
-      />
-      {#if stats.swap.total > 0}
-        <Meter
-          label="Swap"
-          value={percent(stats.swap.used, stats.swap.total)}
-          detail="{bytes(stats.swap.used)} of {bytes(stats.swap.total)}"
-        />
-      {/if}
-      {#each stats.disks as disk (disk.mount)}
-        <Meter
-          label="Disk {disk.mount}"
-          value={percent(disk.used, disk.total)}
-          detail="{bytes(disk.used)} of {bytes(disk.total)}"
-        />
-      {/each}
+        {#each stats.disks as disk (disk.mount)}
+          <Meter
+            label="Disk {disk.mount}"
+            value={percent(disk.used, disk.total)}
+            detail="{bytes(disk.used)} of {bytes(disk.total)}"
+          />
+        {/each}
 
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-2 pt-1 text-sm">
-        <dt class="text-muted-foreground">Load</dt>
-        <dd class="text-right tabular-nums">{stats.load.map((n) => n.toFixed(2)).join('  ')}</dd>
-        <dt class="text-muted-foreground">Download</dt>
-        <dd class="text-right tabular-nums">{bytes(stats.network.rxBytesPerSec)}/s</dd>
-        <dt class="text-muted-foreground">Upload</dt>
-        <dd class="text-right tabular-nums">{bytes(stats.network.txBytesPerSec)}/s</dd>
-      </dl>
-    </section>
+        <dl class="grid grid-cols-2 gap-x-4 gap-y-2 pt-1 text-sm">
+          <dt class="text-muted-foreground">Load</dt>
+          <dd class="text-right tabular-nums">{stats.load.map((n) => n.toFixed(2)).join('  ')}</dd>
+          <dt class="text-muted-foreground">Download</dt>
+          <dd class="text-right tabular-nums">{bytes(stats.network.rxBytesPerSec)}/s</dd>
+          <dt class="text-muted-foreground">Upload</dt>
+          <dd class="text-right tabular-nums">{bytes(stats.network.txBytesPerSec)}/s</dd>
+        </dl>
+      </Tabs.Content>
+
+      <Tabs.Content value="temperatures" class="space-y-4">
+        {@const temps = stats.temperatures}
+        {#each [temps.cpu, ...temps.gpus].filter((t) => t !== null) as t, i (i)}
+          <Meter label={t.label} value={percent(t.celsius ?? 0, t.limitC)} detail={tempDetail(t)} />
+        {/each}
+        {#if temps.disks === null}
+          <p class="text-muted-foreground text-sm">
+            Install smartmontools and add the smartctl sudoers rule to show disk temperatures.
+          </p>
+        {:else}
+          {#each temps.disks as disk (disk.label)}
+            <Meter
+              label={disk.label}
+              value={percent(disk.celsius ?? 0, disk.limitC)}
+              detail={tempDetail(disk)}
+            />
+          {/each}
+        {/if}
+      </Tabs.Content>
+    </Tabs.Root>
 
     <section class="space-y-3" aria-labelledby="containers-heading">
       <h2 id="containers-heading" class="text-sm font-medium">Containers</h2>

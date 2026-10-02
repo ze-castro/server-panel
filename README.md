@@ -6,7 +6,7 @@
 
 A self-hosted web panel for a Linux server, with two sides:
 
-- **Left:** live stats (CPU, GPU, memory, swap, disks, load, network, containers) and restart and shut down buttons.
+- **Left:** live stats (CPU, GPU, memory, swap, disks, load, network, containers), temperatures (CPU, GPU, physical disks) and restart and shut down buttons.
 - **Right:** a live SSH terminal and a log viewer for the systemd journal and Docker containers.
 
 ![Server: stats and power buttons on the left, SSH terminal on the right](docs/screenshot.png)
@@ -65,10 +65,17 @@ echo "from=\"172.16.0.0/12\",no-agent-forwarding,no-port-forwarding,no-X11-forwa
 echo "$USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff" \
   | sudo tee /etc/sudoers.d/server && sudo chmod 440 /etc/sudoers.d/server
 
-# 3. Read the journal and Docker (log out and back in afterwards)
+# 3. Disk temperatures: passwordless smartctl, only with the exact arguments the panel uses
+sudo apt install smartmontools
+sudo tee /etc/sudoers.d/server-smartctl >/dev/null <<EOF
+$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl --json\=c -n standby -A -l scttempsts /dev/sd*, /usr/sbin/smartctl --json\=c -i -A /dev/nvme*
+EOF
+sudo chmod 440 /etc/sudoers.d/server-smartctl && sudo visudo -c
+
+# 4. Read the journal and Docker (log out and back in afterwards)
 sudo usermod -aG docker,systemd-journal $USER
 
-# 4. Fill in the server section of .env, then start
+# 5. Fill in the server section of .env, then start
 docker compose pull && docker compose up -d --no-build
 ```
 
@@ -87,4 +94,5 @@ The app listens on `127.0.0.1:3010` (set `SERVER_PORT` to change it). Put your a
   - `Encrypted private OpenSSH key detected`: set `SSH_KEY_PASSPHRASE`.
   - `host key mismatch`: `SSH_HOST_KEY_SHA256` must be the ed25519 fingerprint from step 2.
 - **GPU busy % missing on Intel:** the driver doesn't expose RC6 residency, so the bar shows the current clock speed instead.
+- **Disk temperatures missing:** test the exact command the panel runs, e.g. `sudo -n /usr/sbin/smartctl --json=c -n standby -A -l scttempsts /dev/sda`. A password prompt or "not allowed" means the sudoers rule doesn't match. Disk temps refresh every 30s; spun-down SATA disks show "Spun down" and aren't woken. eMMC and software RAID devices (md) have no temperature and aren't listed.
 - **If your proxy runs in Docker:** remove `ports:` from `compose.yaml` and put both containers on a shared network.
