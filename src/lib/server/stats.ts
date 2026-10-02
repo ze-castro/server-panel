@@ -68,6 +68,7 @@ for d in $(lsblk -dn -o NAME,TYPE | awk '$2 == "disk" { print $1 }'); do
 		sd*) sudo -n /usr/sbin/smartctl --json=c -n standby -A -l scttempsts "/dev/$d" ;;
 		nvme*) sudo -n /usr/sbin/smartctl --json=c -i -A "/dev/$d" ;;
 	esac
+	echo # compact JSON has no trailing newline
 done
 `;
 

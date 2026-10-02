@@ -99,7 +99,7 @@
   {/if}
 
   {#if stats}
-    <Tabs.Root value="resources" class="flex-col gap-4">
+    <Tabs.Root value="resources" class="gap-4">
       <Tabs.List class="w-full">
         <Tabs.Trigger value="resources">Resources</Tabs.Trigger>
         <Tabs.Trigger value="temperatures">Temperatures</Tabs.Trigger>
