@@ -27,7 +27,7 @@
   let container = $state('');
   let lines = $state('500');
   let filter = $state('');
-  let follow = $state(false);
+  let follow = $state(true);
 
   let output = $state('');
   let notice = $state<string | null>(null);
